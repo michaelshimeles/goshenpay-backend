@@ -1,5 +1,5 @@
 {
-  "id": "4fa446f8-8c36-4891-afad-ed5bbcfea958",
+  "id": "81714d3d-c774-4911-b9fe-c92f44922dd6",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "5",
   "dialect": "pg",
@@ -14,6 +14,18 @@
           "primaryKey": true,
           "notNull": true
         },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "church_id": {
+          "name": "church_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "org_name": {
           "name": "org_name",
           "type": "text",
@@ -26,13 +38,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "org_type": {
-          "name": "org_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
         "org_description": {
           "name": "org_description",
           "type": "text",
@@ -42,13 +47,6 @@
         },
         "org_logo": {
           "name": "org_logo",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "org_banner": {
-          "name": "org_banner",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -91,6 +89,13 @@
         },
         "org_zip": {
           "name": "org_zip",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
+        },
+        "org_country": {
+          "name": "org_country",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

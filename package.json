@@ -17,7 +17,10 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.7.2",
+    "@types/uuid": "^10.0.0",
     "drizzle-orm": "^0.29.3",
-    "hono": "^3.12.2"
+    "hono": "^3.12.2",
+    "uuid": "^10.0.0",
+    "zod": "^3.23.8"
   }
 }
