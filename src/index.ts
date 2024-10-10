@@ -14,9 +14,16 @@ export const app = new Hono<{ Bindings: Env }>();
 // Add CORS middleware
 app.use("*", (c, next) => {
   c.header("Access-Control-Allow-Origin", "*"); // Allow all origins
-  c.header("Access-Control-Allow-Methods", "POST, GET, OPTIONS"); // Allow specific methods
+  c.header("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT"); // Allow specific methods
   c.header("Access-Control-Allow-Headers", "Content-Type"); // Allow specific headers
   return next();
+});
+
+app.get("/", (c) => {
+  return c.json({
+    success: true,
+    message: "Welcome to the GoshenPay API",
+  });
 });
 
 app.post("/get-church", async (c) => {
@@ -26,7 +33,6 @@ app.post("/get-church", async (c) => {
     const db = drizzle(client);
 
     const { userId } = await c.req.json();
-
 
     const result = await db
       .select()
@@ -90,6 +96,48 @@ app.post("/create-church", async (c) => {
     return c.json({
       success: true,
       message: "Church created successfully",
+    });
+  } catch (error) {
+    console.log(error);
+    return c.json(
+      {
+        success: false,
+        error,
+      },
+      400
+    );
+  }
+});
+
+app.post("/update-church", async (c) => {
+  try {
+    const client = new Pool({ connectionString: c.env.DATABASE_URL });
+
+    const db = drizzle(client);
+
+    const payload = await c.req.json();
+
+    console.log("FIRED", payload);
+    await db
+      .update(churches)
+      .set({
+        org_name: payload.org_name,
+        org_site: payload.org_site,
+        org_email: payload.org_email,
+        org_phone: payload.org_phone,
+        org_address: payload.org_address,
+        org_city: payload.org_city,
+        org_state: payload.org_state,
+        org_zip: payload.org_zip,
+        org_country: payload.org_country,
+        org_description: payload.org_description,
+        org_logo: payload.org_logo,
+      })
+      .where(eq(churches.church_id, payload.church_id));
+
+    return c.json({
+      success: true,
+      message: "Church updated successfully",
     });
   } catch (error) {
     console.log(error);
