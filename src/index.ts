@@ -1,5 +1,5 @@
 import { Pool } from "@neondatabase/serverless";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-serverless";
 import { Hono } from "hono";
 import { v4 as uuidv4 } from "uuid";
@@ -32,6 +32,37 @@ app.post("/get-church", async (c) => {
 
     const db = drizzle(client);
 
+    const { user_id, church_id } = await c.req.json();
+
+    const result = await db
+      .select()
+      .from(churches)
+      .where(
+        and(eq(churches.church_id, church_id), eq(churches.user_id, user_id))
+      );
+
+    return c.json({
+      success: true,
+      message: "Church fetched successfully",
+      result,
+    });
+  } catch (error) {
+    return c.json(
+      {
+        success: false,
+        error,
+      },
+      400
+    );
+  }
+});
+
+app.post("/get-churches", async (c) => {
+  try {
+    const client = new Pool({ connectionString: c.env.DATABASE_URL });
+
+    const db = drizzle(client);
+
     const { userId } = await c.req.json();
 
     const result = await db
@@ -41,7 +72,7 @@ app.post("/get-church", async (c) => {
 
     return c.json({
       success: true,
-      message: "Church fetched successfully",
+      message: "Churches fetched successfully",
       result,
     });
   } catch (error) {
