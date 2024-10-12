@@ -182,4 +182,35 @@ app.post("/update-church", async (c) => {
   }
 });
 
+app.post("/delete-church", async (c) => {
+  try {
+    const client = new Pool({ connectionString: c.env.DATABASE_URL });
+
+    const db = drizzle(client);
+
+    const { church_id, user_id } = await c.req.json();
+
+    console.log("DELETE", church_id);
+
+    const result = await db
+      .delete(churches)
+      .where(eq(churches.church_id, church_id))
+      .finally();
+
+    return c.json({
+      success: true,
+      message: "Church has been deleted successfully",
+    });
+  } catch (error) {
+    console.log(error);
+    return c.json(
+      {
+        success: false,
+        error,
+      },
+      400
+    );
+  }
+});
+
 export default app;
