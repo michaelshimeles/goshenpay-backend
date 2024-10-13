@@ -188,13 +188,11 @@ app.post("/delete-church", async (c) => {
 
     const db = drizzle(client);
 
-    const { church_id, user_id } = await c.req.json();
+    const payload = await c.req.json();
 
-    console.log("DELETE", church_id);
-
-    const result = await db
+    await db
       .delete(churches)
-      .where(eq(churches.church_id, church_id))
+      .where(eq(churches.church_id, payload?.church_id))
       .finally();
 
     return c.json({
