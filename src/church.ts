@@ -33,6 +33,23 @@ app
         userId,
       } = await c.req.json();
 
+      if (
+        !org_name &&
+        !org_site &&
+        !org_email &&
+        !org_phone &&
+        !org_address &&
+        !org_city &&
+        !org_state &&
+        !org_zip &&
+        !org_country &&
+        !org_description &&
+        !org_logo &&
+        !userId
+      ) {
+        throw new Error("Missing item or item(s)");
+      }
+
       await db.insert(churches).values({
         church_id: uuidv4(),
         org_name,
@@ -70,25 +87,55 @@ app
 
       const db = drizzle(client);
 
-      const payload = await c.req.json();
+      const {
+        org_name,
+        org_site,
+        org_email,
+        org_phone,
+        org_address,
+        org_city,
+        org_state,
+        org_zip,
+        org_country,
+        org_description,
+        org_logo,
+        userId,
+        church_id,
+      } = await c.req.json();
 
-      console.log("FIRED", payload);
+      if (
+        !org_name &&
+        !org_site &&
+        !org_email &&
+        !org_phone &&
+        !org_address &&
+        !org_city &&
+        !org_state &&
+        !org_zip &&
+        !org_country &&
+        !org_description &&
+        !org_logo &&
+        !userId &&
+        !church_id
+      ) {
+        throw new Error("Missing item or item(s)");
+      }
       await db
         .update(churches)
         .set({
-          org_name: payload.org_name,
-          org_site: payload.org_site,
-          org_email: payload.org_email,
-          org_phone: payload.org_phone,
-          org_address: payload.org_address,
-          org_city: payload.org_city,
-          org_state: payload.org_state,
-          org_zip: payload.org_zip,
-          org_country: payload.org_country,
-          org_description: payload.org_description,
-          org_logo: payload.org_logo,
+          org_name,
+          org_site,
+          org_email,
+          org_phone,
+          org_address,
+          org_city,
+          org_state,
+          org_zip,
+          org_country,
+          org_description,
+          org_logo,
         })
-        .where(eq(churches.church_id, payload.church_id));
+        .where(eq(churches.church_id, church_id));
 
       return c.json({
         success: true,
@@ -111,11 +158,15 @@ app
 
       const db = drizzle(client);
 
-      const payload = await c.req.json();
+      const { church_id } = await c.req.json();
+
+      if (!church_id) {
+        throw new Error("Missing item or item(s)");
+      }
 
       await db
         .delete(churches)
-        .where(eq(churches.church_id, payload?.church_id))
+        .where(eq(churches.church_id, church_id))
         .finally();
 
       return c.json({
@@ -142,6 +193,9 @@ app.post("/get-church", async (c) => {
 
     const { user_id, church_id } = await c.req.json();
 
+    if (!user_id && !church_id) {
+      throw new Error("Missing item or item(s)");
+    }
     const result = await db
       .select()
       .from(churches)
@@ -172,6 +226,10 @@ app.post("/get-churches", async (c) => {
     const db = drizzle(client);
 
     const { userId } = await c.req.json();
+
+    if (!userId) {
+      throw new Error("Missing item or item(s)");
+    }
 
     const result = await db
       .select()

@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import church from "./church";
+import payment from "./payment";
 
 export const app = new Hono();
 
@@ -23,5 +24,6 @@ app.get("/", (c) => {
 });
 
 app.route("/church", church);
+app.route("/payment", payment)
 
 export default app;
