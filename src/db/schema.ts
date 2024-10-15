@@ -1,5 +1,15 @@
 // db/schema.ts
-import { pgTable, serial, text } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  user_id: text("user_id").unique().notNull(),
+  created_at: text("created_at").notNull(),
+  email: text("email").unique(),
+  first_name: text("first_name"),
+  last_name: text("last_name"),
+  profile_image_url: text("profile_image_url"),
+});
 
 export const churches = pgTable("churches", {
   id: serial("id").primaryKey(),

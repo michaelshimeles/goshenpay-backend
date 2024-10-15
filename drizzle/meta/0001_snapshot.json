@@ -1,6 +1,6 @@
 {
-  "id": "01eb8301-425c-432c-ae34-5c060394fa8d",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "433cd014-78fe-4740-a5ce-0b55d1da0fa8",
+  "prevId": "01eb8301-425c-432c-ae34-5c060394fa8d",
   "version": "5",
   "dialect": "pg",
   "tables": {
@@ -125,10 +125,9 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": true
         },
         "email": {
           "name": "email",
