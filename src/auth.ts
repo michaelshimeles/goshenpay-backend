@@ -71,7 +71,6 @@ app.post("/webhook", async (c) => {
           last_name: data.last_name,
           profile_image_url: data.profile_image_url,
           user_id: data.id,
-          created_at: new Date(data.created_at).toISOString(),
         });
 
         return c.json(result);
@@ -94,7 +93,6 @@ app.post("/webhook", async (c) => {
           last_name: data.last_name,
           profile_image_url: data.profile_image_url,
           user_id: data.id,
-          created_at: new Date(data.created_at).toISOString(),
         });
 
         return c.json(result);
@@ -121,7 +119,6 @@ const userCreate = async ({
   last_name,
   profile_image_url,
   user_id,
-  created_at,
 }: {
   c: any;
   email: string;
@@ -129,20 +126,17 @@ const userCreate = async ({
   last_name: string;
   profile_image_url: string;
   user_id: string;
-  created_at: string;
 }) => {
   try {
     const client = new Pool({ connectionString: c.env.DATABASE_URL });
     const db = drizzle(client);
 
-    console.log("created_at", created_at);
     await db.insert(users).values({
       email,
       first_name,
       last_name,
       profile_image_url,
       user_id,
-      created_at,
     });
 
     return {
@@ -164,7 +158,6 @@ const userUpdate = async ({
   last_name,
   profile_image_url,
   user_id,
-  created_at,
 }: {
   c: any;
   email: string;
@@ -172,7 +165,6 @@ const userUpdate = async ({
   last_name: string;
   profile_image_url: string;
   user_id: string;
-  created_at: string;
 }) => {
   try {
     const client = new Pool({ connectionString: c.env.DATABASE_URL });
@@ -186,7 +178,6 @@ const userUpdate = async ({
         last_name,
         profile_image_url,
         user_id,
-        created_at,
       })
       .where(eq(users.user_id, user_id));
 

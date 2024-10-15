@@ -1,5 +1,10 @@
 import { Hono } from "hono";
 import { getStripe } from "../utils/exports";
+import { Pool } from "@neondatabase/serverless";
+import { and, eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/neon-serverless";
+import { churches } from "./db/schema";
+
 export type Env = {
   DATABASE_URL: string;
   STRIPE_SECRET_KEY: string;
@@ -11,9 +16,35 @@ export type Env = {
 };
 
 export const app = new Hono<{ Bindings: Env }>();
+
+// Simple in-memory store for state
+const stateStore = new Map<string, { userId: string; timestamp: number }>();
+
+// Function to clean up expired states (older than 15 minutes)
+function cleanupStates() {
+  const now = Date.now();
+  for (const [state, data] of stateStore.entries()) {
+    if (now - data.timestamp > 15 * 60 * 1000) {
+      stateStore.delete(state);
+    }
+  }
+}
+
 // Generate OAuth link for account connection
 app.get("/oauth/link", async (c) => {
-  const state = Math.random().toString(36).substring(7); // Generate a random state
+  const userId = c.req.query("userId");
+
+  if (!userId) {
+    return c.json({ error: "User ID is required" }, 400);
+  }
+  const state = crypto.randomUUID();
+
+  // Store the state and userId in memory
+  stateStore.set(state, { userId, timestamp: Date.now() });
+
+  // Clean up old states
+  cleanupStates();
+
   // The state parameter is used for security. In a production app, you should store this state and validate it in the callback to prevent CSRF attacks.
   // In a real application, you should store this state and validate it in the callback
   const args = new URLSearchParams({
@@ -23,6 +54,8 @@ app.get("/oauth/link", async (c) => {
     scope: "read_write",
     redirect_uri: `${c.env.SERVER_URL}/connect/oauth/callback`,
   });
+
+  console.log("args", args.toString());
   const url = `https://connect.stripe.com/oauth/authorize?${args.toString()}`;
   return c.json({ url });
 });
@@ -30,8 +63,30 @@ app.get("/oauth/link", async (c) => {
 // Handle OAuth redirect
 app.get("/oauth/callback", async (c) => {
   const stripe = getStripe(c.env);
+  const { code, state } = c.req.query();
 
-  const { code, state, userId } = c.req.query();
+  console.log("/callback state", state);
+
+  if (!state || typeof state !== "string") {
+    return c.json({ success: false, error: "Invalid state parameter" }, 400);
+  }
+
+  // Retrieve userId from memory using the state
+  const stateData = stateStore.get(state);
+  if (!stateData) {
+    return c.json({ success: false, error: "Invalid or expired state" }, 400);
+  }
+
+  const { userId } = stateData;
+
+  // Delete the state from memory as it's no longer needed
+  stateStore.delete(state);
+
+  console.log("/callback userId", userId);
+
+  const client = new Pool({ connectionString: c.env.DATABASE_URL });
+
+  const db = drizzle(client);
 
   // This endpoint handles the redirect after a user authorizes your application.
   // It exchanges the authorization code for an access token and connected account ID.
@@ -47,18 +102,38 @@ app.get("/oauth/callback", async (c) => {
 
     const connectedAccountId = response.stripe_user_id;
     // Store this ID in your database, associated with your user
-
     // TODO: Replace this with your actual database logic
-    // await saveConnectedAccount(c.get("userId"), connectedAccountId);
 
-    return c.json({ success: true, account_id: connectedAccountId });
+    // Fetch detailed account information
+    const account = await stripe.accounts.retrieve(connectedAccountId!);
+
+    await db
+      .update(churches)
+      .set({
+        stripe_account_id: connectedAccountId,
+        stripe_account_status: account.charges_enabled ? "active" : "pending",
+        stripe_account_type: account.type,
+        stripe_account_capabilities: account.capabilities,
+        stripe_account_requirements: account.requirements,
+        stripe_account_created_at: new Date(
+          account.created! * 1000
+        ).toISOString(),
+        is_stripe_connected: true,
+      })
+      .where(eq(churches?.user_id, userId));
+
+    return c.redirect(
+      `${c.env.FRONTEND_URL}/connect-success?accountId=${connectedAccountId}`
+    );
   } catch (err: any) {
     console.error("OAuth error:", err);
-    return c.json({ success: false, error: err.message }, 400);
+    return c.redirect(
+      `${c.env.FRONTEND_URL}/connect-error?error=${encodeURIComponent(
+        err.message
+      )}`
+    );
   }
 });
-
-// {"success":true,"account_id":"acct_1Q9uMzCQDtKM6H6l"}
 
 // Retrieve account details
 app.get("/accounts/:id", async (c) => {
@@ -94,5 +169,4 @@ app.get("/accounts", async (c) => {
   }
 });
 
-// https://connect.stripe.com/oauth/authorize?redirect_uri=https://connect.stripe.com/hosted/oauth&client_id=ca_R1ZfmVf6KeTWof1xH9Z3fDTCzusikoye&state=onbrd_R1xThHBf0aTatIxFDBKUbEWS49&response_type=code&scope=read_write&stripe_user[country]=CA
 export default app;

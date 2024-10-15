@@ -185,6 +185,35 @@ app
     }
   });
 
+app.get("/:churchId/stripe-status", async (c) => {
+  const churchId = c.req.param("churchId");
+  const client = new Pool({ connectionString: c.env.DATABASE_URL });
+  const db = drizzle(client);
+
+  try {
+    const church = await db
+      .select({
+        is_stripe_connected: churches.is_stripe_connected,
+        stripe_account_status: churches.stripe_account_status,
+        stripe_account_type: churches.stripe_account_type,
+        stripe_account_capabilities: churches.stripe_account_capabilities,
+        stripe_account_requirements: churches.stripe_account_requirements,
+      })
+      .from(churches)
+      .where(eq(churches.church_id, churchId))
+      .limit(1);
+
+    if (church.length === 0) {
+      return c.json({ error: "Church not found" }, 404);
+    }
+
+    return c.json(church[0]);
+  } catch (error) {
+    console.error("Error fetching church Stripe status:", error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
 app.post("/get-church", async (c) => {
   try {
     const client = new Pool({ connectionString: c.env.DATABASE_URL });
