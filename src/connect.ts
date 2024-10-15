@@ -13,7 +13,6 @@ export type Env = {
 export const app = new Hono<{ Bindings: Env }>();
 // Generate OAuth link for account connection
 app.get("/oauth/link", async (c) => {
-  console.log("Client ID:", c.env.STRIPE_CONNECT_CLIENT_ID);
   const state = Math.random().toString(36).substring(7); // Generate a random state
   // The state parameter is used for security. In a production app, you should store this state and validate it in the callback to prevent CSRF attacks.
   // In a real application, you should store this state and validate it in the callback
@@ -32,7 +31,8 @@ app.get("/oauth/link", async (c) => {
 app.get("/oauth/callback", async (c) => {
   const stripe = getStripe(c.env);
 
-  const { code, state } = c.req.query();
+  const { code, state, userId } = c.req.query();
+
   // This endpoint handles the redirect after a user authorizes your application.
   // It exchanges the authorization code for an access token and connected account ID.
   // In a real application, you should store the connected account ID in your database, associated with the user who initiated the connection.
