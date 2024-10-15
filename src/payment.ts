@@ -1,5 +1,10 @@
 import { Hono } from "hono";
 import { getStripe } from "../utils/exports";
+import { Pool } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-serverless";
+import { churches } from "./db/schema";
+import { eq } from "drizzle-orm";
+
 export type Env = {
   DATABASE_URL: string;
   STRIPE_SECRET_KEY: string;
@@ -10,53 +15,73 @@ export type Env = {
 
 export const app = new Hono<{ Bindings: Env }>();
 
-app
-  .post("/donate/payment", async (c) => {
-    try {
-      const stripe = getStripe(c.env);
+app.post("/donate/fixed", async (c) => {
+  try {
+    const stripe = getStripe(c.env);
+    const { amount, churchId } = await c.req.json();
 
-      const { amount } = await c.req.json();
+    // Fetch the church's Stripe account ID
+    const client = new Pool({ connectionString: c.env.DATABASE_URL });
+    const db = drizzle(client);
+    const churchResult = await db
+      .select({ stripe_account_id: churches.stripe_account_id })
+      .from(churches)
+      .where(eq(churches.church_id, churchId))
+      .limit(1);
 
-      const session = await stripe.checkout.sessions.create({
-        mode: "payment", // payment or subscription
-        line_items: [
-          {
-            price_data: {
-              currency: "cad",
-              unit_amount: Math.round(amount) * 100,
-              product_data: {
-                name: "Donation",
-                description: "Donating to church",
-              },
-            },
-            quantity: 1,
-          },
-        ],
-        success_url: `${c.env.FRONTEND_URL}/success`,
-        cancel_url: `${c.env.FRONTEND_URL}/cancel`,
-      });
-
-      return c.json({
-        success: true,
-        message: "Session created",
-        session,
-      });
-    } catch (error) {
+    if (churchResult.length === 0 || !churchResult[0].stripe_account_id) {
       return c.json(
         {
           success: false,
-          error,
+          message: "Church not found or not connected to Stripe",
         },
-        400
+        404
       );
     }
-  })
-  .post("/donate/subscription", async (c) => {
-    const { amount, interval } = await c.req.json();
 
+    const connectedAccountId = churchResult[0].stripe_account_id;
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_intent_data: {
+        application_fee_amount: Math.round(amount * 0.05), // 5% fee, adjust as needed
+        transfer_data: {
+          destination: connectedAccountId,
+        },
+      },
+      line_items: [
+        {
+          price_data: {
+            currency: "cad",
+            unit_amount: Math.round(amount) * 100,
+            product_data: {
+              name: "Donation",
+              description: "Donating to church",
+            },
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: `${c.env.FRONTEND_URL}/success`,
+      cancel_url: `${c.env.FRONTEND_URL}/cancel`,
+    });
+
+    return c.json({
+      success: true,
+      message: "Session created",
+      session,
+    });
+  } catch (error: any) {
+    console.error("Error creating payment session:", error);
+    return c.json({ success: false, error: error.message }, 400);
+  }
+});
+
+app.post("/donate/subscription", async (c) => {
+  try {
     const stripe = getStripe(c.env);
+    const { amount, interval, churchId } = await c.req.json();
 
-    // Validate interval
     if (!["week", "month", "year"].includes(interval)) {
       return c.json(
         {
@@ -67,44 +92,70 @@ app
       );
     }
 
-    try {
-      // Create a product for this donation
-      const product = await stripe.products.create({
-        name: `${interval}ly Donation`,
-        type: "service",
-      });
+    // Fetch the church's Stripe account ID
+    const client = new Pool({ connectionString: c.env.DATABASE_URL });
+    const db = drizzle(client);
+    const churchResult = await db
+      .select({ stripe_account_id: churches.stripe_account_id })
+      .from(churches)
+      .where(eq(churches.church_id, churchId))
+      .limit(1);
 
-      // Create a price for this product
-      const price = await stripe.prices.create({
-        product: product.id,
-        unit_amount: Math.round(amount) * 100, // amount in cents
-        currency: "cad",
-        recurring: { interval: interval },
-      });
-
-      // Create a Checkout Session
-      const session = await stripe.checkout.sessions.create({
-        mode: "subscription",
-        line_items: [
-          {
-            price: price.id,
-            quantity: 1,
-          },
-        ],
-        success_url: "http://localhost:3000/success",
-        cancel_url: "http://localhost:3000/cancel",
-      });
-
-      return c.json({
-        success: true,
-        message: "Subscription session created",
-        session,
-      });
-    } catch (error: any) {
-      console.error("Error:", error);
-      return c.json({ success: false, message: error.message }, 500);
+    if (churchResult.length === 0 || !churchResult[0].stripe_account_id) {
+      return c.json(
+        {
+          success: false,
+          message: "Church not found or not connected to Stripe",
+        },
+        404
+      );
     }
-  });
+
+    const connectedAccountId = churchResult[0].stripe_account_id;
+
+    // Create a product for this donation
+    const product = await stripe.products.create({
+      name: `${interval}ly Donation`,
+      type: "service",
+    });
+
+    // Create a price for this product
+    const price = await stripe.prices.create({
+      product: product.id,
+      unit_amount: Math.round(amount) * 100,
+      currency: "cad",
+      recurring: { interval: interval },
+    });
+
+    // Create a Checkout Session
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      payment_intent_data: {
+        // application_fee_percent: 5, // 5% fee, adjust as needed
+        transfer_data: {
+          destination: connectedAccountId,
+        },
+      },
+      line_items: [
+        {
+          price: price.id,
+          quantity: 1,
+        },
+      ],
+      success_url: `${c.env.FRONTEND_URL}/success`,
+      cancel_url: `${c.env.FRONTEND_URL}/cancel`,
+    });
+
+    return c.json({
+      success: true,
+      message: "Subscription session created",
+      session,
+    });
+  } catch (error: any) {
+    console.error("Error creating subscription session:", error);
+    return c.json({ success: false, message: error.message }, 500);
+  }
+});
 
 app.post("/webhook", async (c) => {
   const stripe = getStripe(c.env);
@@ -197,6 +248,5 @@ app.post("/webhook", async (c) => {
 
   return c.text("Received", 200);
 });
-
 
 export default app;
