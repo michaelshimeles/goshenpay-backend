@@ -1,4 +1,11 @@
-import { pgTable, serial, text, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  boolean,
+  jsonb,
+} from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -33,4 +40,5 @@ export const churches = pgTable("churches", {
   org_zip: text("org_zip").default(""),
   org_country: text("org_country").default(""),
   is_stripe_connected: boolean("is_stripe_connected").default(false),
+  donation_configuration: jsonb("donation_configuration"),
 });

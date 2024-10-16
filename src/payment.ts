@@ -18,17 +18,20 @@ export const app = new Hono<{ Bindings: Env }>();
 app.post("/donate/fixed", async (c) => {
   try {
     const stripe = getStripe(c.env);
-    const { amount, churchId } = await c.req.json();
+    const { amount, church_id } = await c.req.json();
 
+    console.log("FIRED")
     // Fetch the church's Stripe account ID
     const client = new Pool({ connectionString: c.env.DATABASE_URL });
     const db = drizzle(client);
+
     const churchResult = await db
       .select({ stripe_account_id: churches.stripe_account_id })
       .from(churches)
-      .where(eq(churches.church_id, churchId))
+      .where(eq(churches.church_id, church_id))
       .limit(1);
 
+    console.log('churchResult', churchResult)
     if (churchResult.length === 0 || !churchResult[0].stripe_account_id) {
       return c.json(
         {

@@ -8,6 +8,13 @@
       "when": 1728966053547,
       "tag": "0000_strong_joshua_kane",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1729051075533,
+      "tag": "0001_low_living_tribunal",
+      "breakpoints": true
     }
   ]
 }

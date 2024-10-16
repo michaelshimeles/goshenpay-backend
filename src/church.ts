@@ -190,6 +190,63 @@ app
     }
   });
 
+app
+  .post("/get/donation-configuration", async (c) => {
+    const { church_id, user_id } = await c.req.json();
+
+    if (!church_id || !user_id) {
+      return c.json({ success: false, error: "Invalid parameter" }, 400);
+    }
+
+    try {
+      const client = new Pool({ connectionString: c.env.DATABASE_URL });
+      const db = drizzle(client);
+
+      const result = await db
+        .select({ donation_configuration: churches.donation_configuration })
+        .from(churches)
+        .where(
+          and(eq(churches.church_id, church_id), eq(churches.user_id, user_id))
+        );
+
+      return c.json({
+        success: true,
+        message: "Update",
+        result: result?.[0]?.donation_configuration,
+      });
+    } catch (error: any) {
+      return c.json({ success: false, error: error.message }, 500);
+    }
+  })
+  .post("/set/donation-configuration", async (c) => {
+    const { configJson, church_id, user_id } = await c.req.json();
+
+    if (!configJson || !church_id || !user_id) {
+      return c.json({ success: false, error: "Invalid parameter" }, 400);
+    }
+
+    try {
+      const client = new Pool({ connectionString: c.env.DATABASE_URL });
+      const db = drizzle(client);
+
+      await db
+        .update(churches)
+        .set({
+          donation_configuration: configJson,
+        })
+        .where(
+          and(eq(churches.church_id, church_id), eq(churches.user_id, user_id))
+        );
+
+      return c.json({
+        success: true,
+        message: "Update",
+      });
+    } catch (error: any) {
+      return c.json({ success: false, error: error.message }, 500);
+    }
+  });
+
 app.post("/:churchId/dashboard-link", async (c) => {
   const churchId = c.req.param("churchId");
   const stripe = getStripe(c.env);
