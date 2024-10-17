@@ -16,6 +16,7 @@
     "wrangler": "^3.22.4"
   },
   "dependencies": {
+    "@clerk/clerk-sdk-node": "^5.0.50",
     "@neondatabase/serverless": "^0.7.2",
     "@types/uuid": "^10.0.0",
     "drizzle-orm": "^0.29.3",
