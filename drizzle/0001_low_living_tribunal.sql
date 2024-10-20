@@ -1,1 +1,0 @@
-ALTER TABLE "churches" ADD COLUMN "donation_configuration" jsonb;

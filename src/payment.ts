@@ -1,9 +1,10 @@
-import { Hono } from "hono";
-import { getStripe } from "../utils/exports";
 import { Pool } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-serverless";
-import { churches } from "./db/schema";
 import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/neon-serverless";
+import { Hono } from "hono";
+import Stripe from "stripe";
+import { getStripe } from "../utils/exports";
+import { churches, donations, donors, stripeEvents } from "./db/schema";
 
 export type Env = {
   DATABASE_URL: string;
@@ -20,7 +21,6 @@ app.post("/donate/fixed", async (c) => {
     const stripe = getStripe(c.env);
     const { amount, church_id } = await c.req.json();
 
-    console.log("FIRED")
     // Fetch the church's Stripe account ID
     const client = new Pool({ connectionString: c.env.DATABASE_URL });
     const db = drizzle(client);
@@ -31,7 +31,6 @@ app.post("/donate/fixed", async (c) => {
       .where(eq(churches.church_id, church_id))
       .limit(1);
 
-    console.log('churchResult', churchResult)
     if (churchResult.length === 0 || !churchResult[0].stripe_account_id) {
       return c.json(
         {
@@ -83,9 +82,9 @@ app.post("/donate/fixed", async (c) => {
 app.post("/donate/subscription", async (c) => {
   try {
     const stripe = getStripe(c.env);
-    const { amount, interval, churchId } = await c.req.json();
+    const { amount, interval, church_id } = await c.req.json();
 
-    if (!["week", "month", "year"].includes(interval)) {
+    if (!["week", "month", "year"].includes(interval?.slice(0, -2))) {
       return c.json(
         {
           success: false,
@@ -98,10 +97,11 @@ app.post("/donate/subscription", async (c) => {
     // Fetch the church's Stripe account ID
     const client = new Pool({ connectionString: c.env.DATABASE_URL });
     const db = drizzle(client);
+
     const churchResult = await db
       .select({ stripe_account_id: churches.stripe_account_id })
       .from(churches)
-      .where(eq(churches.church_id, churchId))
+      .where(eq(churches.church_id, church_id))
       .limit(1);
 
     if (churchResult.length === 0 || !churchResult[0].stripe_account_id) {
@@ -118,7 +118,7 @@ app.post("/donate/subscription", async (c) => {
 
     // Create a product for this donation
     const product = await stripe.products.create({
-      name: `${interval}ly Donation`,
+      name: `${interval} Donation`,
       type: "service",
     });
 
@@ -127,24 +127,24 @@ app.post("/donate/subscription", async (c) => {
       product: product.id,
       unit_amount: Math.round(amount) * 100,
       currency: "cad",
-      recurring: { interval: interval },
+      recurring: { interval: interval.slice(0, -2) },
     });
-
     // Create a Checkout Session
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
-      payment_intent_data: {
-        // application_fee_percent: 5, // 5% fee, adjust as needed
-        transfer_data: {
-          destination: connectedAccountId,
-        },
-      },
       line_items: [
         {
           price: price.id,
           quantity: 1,
         },
       ],
+      payment_method_types: ["card"],
+      subscription_data: {
+        application_fee_percent: 5, // 5% fee, adjust as needed
+        transfer_data: {
+          destination: connectedAccountId,
+        },
+      },
       success_url: `${c.env.FRONTEND_URL}/success`,
       cancel_url: `${c.env.FRONTEND_URL}/cancel`,
     });
@@ -161,92 +161,100 @@ app.post("/donate/subscription", async (c) => {
 });
 
 app.post("/webhook", async (c) => {
-  const stripe = getStripe(c.env);
+  const stripe = new Stripe(c.env.STRIPE_SECRET_KEY, {
+    apiVersion: "2024-09-30.acacia",
+  });
+
   const sig = c.req.header("stripe-signature");
   const rawBody = await c.req.raw.text();
 
-  let event;
+  let event: Stripe.Event;
 
   try {
-    event = stripe.webhooks.constructEvent(
+    const webhookSecret = c.env.STRIPE_WEBHOOK_SECRET;
+    console.log("Using webhook secret:", webhookSecret);
+
+    event = await stripe.webhooks.constructEventAsync(
       rawBody,
       sig!,
-      c.env.STRIPE_WEBHOOK_SECRET
+      webhookSecret
     );
   } catch (err: any) {
     console.error("Webhook signature verification failed:", err.message);
     return c.text("Webhook signature verification failed", 400);
   }
 
-  // Handle the event
-  switch (event.type) {
-    case "account.updated":
-      console.log("Account updated:", event.data.object.id);
-      break;
-    case "account.application.deauthorized":
-      console.log("Account application deauthorized:", event.data.object.id);
-      break;
-    case "account.external_account.created":
-      console.log(
-        "External account created for account:",
-        event.data.object.account
-      );
-      break;
-    case "account.external_account.deleted":
-      console.log(
-        "External account deleted for account:",
-        event.data.object.account
-      );
-      break;
-    case "account.external_account.updated":
-      console.log(
-        "External account updated for account:",
-        event.data.object.account
-      );
-      break;
-    case "payment_intent.succeeded":
-      console.log("Payment intent succeeded:", event.data.object.id);
-      // try {
-      //   const paymentIntent = event.data.object;
-      //   await updateOrderStatus(paymentIntent.metadata.orderId, "paid");
-      //   await sendPaymentConfirmationEmail(paymentIntent.receipt_email);
-      //   // If this payment was for a connected account, you might do something like:
-      //   if (
-      //     paymentIntent.transfer_data &&
-      //     paymentIntent.transfer_data.destination
-      //   ) {
-      //     await updateConnectedAccountBalance(
-      //       paymentIntent.transfer_data.destination,
-      //       paymentIntent.amount
-      //     );
-      //   }
-      // } catch (error) {
-      //   console.error("Error processing payment_intent.succeeded:", error);
-      //   // Depending on your error handling strategy, you might want to rethrow the error
-      //   // or return an error response
-      // }
+  const client = new Pool({ connectionString: c.env.DATABASE_URL });
+  const db = drizzle(client);
 
-      break;
-    case "payment_intent.payment_failed":
-      console.log("Payment intent failed:", event.data.object.id);
-      break;
-    case "charge.succeeded":
-      console.log("Charge succeeded:", event.data.object.id);
-      break;
-    case "charge.failed":
-      console.log("Charge failed:", event.data.object.id);
-      break;
-    case "payout.created":
-      console.log("Payout created:", event.data.object.id);
-      break;
-    case "payout.failed":
-      console.log("Payout failed:", event.data.object.id);
-      break;
-    case "payout.paid":
-      console.log("Payout paid:", event.data.object.id);
-      break;
-    default:
-      console.log(`Unhandled event type ${event.type}`);
+  // Log the event in the stripeEvents table
+  try {
+    await db.insert(stripeEvents).values({
+      stripeEventId: event.id,
+      type: event.type,
+      accountId: (event.account as string) || null,
+      objectId: "id" in event.data.object ? event.data.object.id : null,
+      objectType: event.data.object.object,
+      status: "status" in event.data.object ? event.data.object.status : null,
+      amount: (event.data.object as any).amount?.toString() || null,
+      currency: (event.data.object as any).currency || null,
+      data: event.data.object,
+    });
+    console.log("Event logged in database:", event.id);
+  } catch (error) {
+    console.error("Error logging event to database:", error);
+    // Continue processing the event even if logging fails
+  }
+
+  try {
+    switch (event.type) {
+      case "account.updated":
+        console.log("account.updated");
+        break;
+      case "account.application.deauthorized":
+        console.log("account.application.deauthorized");
+        break;
+      case "account.external_account.created":
+        console.log("account.external_account.created");
+        break;
+      case "account.external_account.deleted":
+        console.log("account.external_account.deleted");
+        break;
+      case "account.external_account.updated":
+        console.log("account.external_account.updated");
+        break;
+      case "payment_intent.succeeded":
+        console.log("payment_intent.succeeded");
+        break;
+      case "payment_intent.payment_failed":
+        console.log("payment_intent.payment_failed");
+        break;
+      case "charge.succeeded":
+        console.log("charge.succeeded");
+        break;
+      case "charge.failed":
+        console.log("charge.failed");
+        break;
+      case "payout.created":
+        console.log("payout.created");
+        break;
+      case "payout.failed":
+        console.log("payout.failed");
+        break;
+      case "payout.paid":
+        console.log("payout.paid");
+        break;
+      default:
+        console.log(`Unhandled event type ${event.type}`);
+      // You might want to log these unhandled events for future implementation
+    }
+  } catch (error) {
+    console.error(`Error processing event ${event.type}:`, error);
+    await db
+      .update(stripeEvents)
+      .set({ error: (error as Error).message })
+      .where(eq(stripeEvents.stripeEventId, event.id));
+    return c.text("Webhook processing failed", 500);
   }
 
   return c.text("Received", 200);

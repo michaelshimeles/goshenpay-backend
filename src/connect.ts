@@ -1,8 +1,8 @@
+import { Pool } from "@neondatabase/serverless";
+import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/neon-serverless";
 import { Hono } from "hono";
 import { getStripe } from "../utils/exports";
-import { Pool } from "@neondatabase/serverless";
-import { and, eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/neon-serverless";
 import { churches } from "./db/schema";
 
 export type Env = {
@@ -55,7 +55,6 @@ app.get("/oauth/link", async (c) => {
     redirect_uri: `${c.env.SERVER_URL}/connect/oauth/callback`,
   });
 
-  console.log("args", args.toString());
   const url = `https://connect.stripe.com/oauth/authorize?${args.toString()}`;
   return c.json({ url });
 });
@@ -64,8 +63,6 @@ app.get("/oauth/link", async (c) => {
 app.get("/oauth/callback", async (c) => {
   const stripe = getStripe(c.env);
   const { code, state } = c.req.query();
-
-  console.log("/callback state", state);
 
   if (!state || typeof state !== "string") {
     return c.json({ success: false, error: "Invalid state parameter" }, 400);
@@ -81,8 +78,6 @@ app.get("/oauth/callback", async (c) => {
 
   // Delete the state from memory as it's no longer needed
   stateStore.delete(state);
-
-  console.log("/callback userId", userId);
 
   const client = new Pool({ connectionString: c.env.DATABASE_URL });
 
@@ -115,9 +110,6 @@ app.get("/oauth/callback", async (c) => {
         stripe_account_type: account.type,
         stripe_account_capabilities: account.capabilities,
         stripe_account_requirements: account.requirements,
-        stripe_account_created_at: new Date(
-          account.created! * 1000
-        ).toISOString(),
         is_stripe_connected: true,
       })
       .where(eq(churches?.user_id, userId));
@@ -143,8 +135,26 @@ app.get("/accounts/:id", async (c) => {
   const stripe = getStripe(c.env);
 
   const accountId = c.req.param("id");
+
+  const client = new Pool({ connectionString: c.env.DATABASE_URL });
+
+  const db = drizzle(client);
+
   try {
     const account = await stripe.accounts.retrieve(accountId);
+
+    await db
+      .update(churches)
+      .set({
+        stripe_account_id: accountId,
+        stripe_account_status: account.charges_enabled ? "active" : "pending",
+        stripe_account_type: account.type,
+        stripe_account_capabilities: account.capabilities,
+        stripe_account_requirements: account.requirements,
+        is_stripe_connected: true,
+      })
+      .where(eq(churches?.stripe_account_id, accountId));
+
     return c.json({ success: true, account });
   } catch (error: any) {
     console.error("Error retrieving account:", error);
