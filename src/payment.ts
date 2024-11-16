@@ -207,14 +207,18 @@ app.post("/webhook", async (c) => {
       case "customer.subscription.created":
       case "customer.subscription.updated":
       case "customer.subscription.deleted":
-        // await handleSubscriptionEvent(event);
+        // await handleSubscriptionEvent(event, db);
+        break;
+      case "customer.created":
+      case "customer.updated":
+        // await handleCustomerEvent(event, db);
         break;
       case "account.updated":
-        // await handleAccountEvent(event);
+        // await handleAccountEvent(event, db);
         break;
       case "payout.paid":
       case "payout.failed":
-        // await handlePayoutEvent(event);
+        // await handlePayoutEvent(event, db);
         break;
       default:
         console.log(`Unhandled event type ${event.type}`);
@@ -248,5 +252,6 @@ async function updateEventWithError(db: any, eventId: string, error: any) {
     .set({ error: (error as Error).message })
     .where(eq(stripeEvents.stripeEventId, eventId));
 }
+
 
 export default app;

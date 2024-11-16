@@ -3,12 +3,13 @@ import church from "./church";
 import payment from "./payment";
 import connectRoutes from "./connect";
 import auth from "./auth";
-// import analytics from "./analytics"
+import { zValidator } from "@hono/zod-validator";
+import { z } from "zod";
 
 export const app = new Hono();
 
 // Home endpoint
-app.get("/", (c) => {
+app.get("/", zValidator("query", z.object({})), (c) => {
   return c.json({
     success: true,
     message: "Welcome to the GoshenPay API",
